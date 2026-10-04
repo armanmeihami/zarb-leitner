@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>جعبه لایتنر جدول ضرب</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--font:"Vazirmatn",Tahoma,"Segoe UI",Arial,sans-serif}
+input,button,select,textarea{font-family:inherit}
+body{font-family:var(--font);background:#f4f6f8;margin:0;padding:20px;color:#222}
+.app{max-width:520px;margin:auto}
+.card,.panel{background:white;border-radius:18px;padding:20px;box-shadow:0 4px 18px #00000012;margin-bottom:16px}
+h1{text-align:center;font-size:25px;margin:8px 0 18px}
+.stats{display:flex;gap:8px;justify-content:space-between;text-align:center}
+.stat{flex:1;background:#f0f3f6;border-radius:12px;padding:10px}
+.stat b{display:block;font-size:20px;margin-top:4px}
+.question{text-align:center;font-size:38px;font-weight:bold;margin:30px 0}
+input{width:100%;box-sizing:border-box;padding:15px;border:2px solid #ddd;border-radius:12px;font-size:22px;text-align:center}
+button{width:100%;padding:14px;margin-top:10px;border:0;border-radius:12px;font-size:17px;cursor:pointer;background:#222;color:#fff}
+button.secondary{background:#e9edf1;color:#222}
+button.correct{background:#2e8b57}
+button.wrong{background:#b33a3a}
+.message{text-align:center;font-size:18px;font-weight:bold;min-height:28px;margin-top:12px}
+.small{text-align:center;color:#666;font-size:14px}
+.hidden{display:none}
+select{padding:10px;border-radius:10px;width:100%;font-size:16px}
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>🧠 جعبه لایتنر جدول ضرب</h1>
+
+  <div class="panel">
+    <div class="stats">
+      <div class="stat">امروز<b id="today">0</b></div>
+      <div class="stat">درست<b id="correctCount">0</b></div>
+      <div class="stat">کارت<b id="cardCount">0</b></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <label>جدول‌های مورد تمرین:</label>
+    <select id="range">
+      <option value="2-5">۲ تا ۵</option>
+      <option value="6-10">۶ تا ۱۰</option>
+      <option value="2-10" selected>۲ تا ۱۰</option>
+    </select>
+    <button class="secondary" onclick="newSession()">شروع / بازنشانی کارت‌ها</button>
+  </div>
+
+  <div class="card">
+    <div class="small" id="boxLabel">جعبه ۱</div>
+    <div class="question" id="question">—</div>
+    <input id="answer" type="number" inputmode="numeric" placeholder="پاسخ را وارد کنید">
+    <button onclick="checkAnswer()">بررسی پاسخ</button>
+    <div class="message" id="message"></div>
+    <button id="nextBtn" class="secondary hidden" onclick="nextCard()">کارت بعدی</button>
+  </div>
+
+  <div class="panel small">
+    قانون: پاسخ درست → یک جعبه جلوتر ✅<br>
+    پاسخ غلط → جعبه ۱ و انتهای صف ❌
+  </div>
+</div>
+
+<script>
+const KEY="zarb_leitner_v1";
+let data = JSON.parse(localStorage.getItem(KEY) || "null");
+let queue=[], current=null, answered=false;
+
+function parseRange(){
+  const [a,b]=document.getElementById("range").value.split("-").map(Number);
+  return [a,b];
+}
+function makeCards(){
+  const [a,b]=parseRange();
+  const cards=[];
+  for(let x=a;x<=b;x++){
+    for(let y=1;y<=10;y++){
+      cards.push({id:x+"x"+y,a:x,b:y,box:1});
+    }
+  }
+  return cards;
+}
+function save(){ localStorage.setItem(KEY,JSON.stringify(data)); updateStats(); }
+function todayKey(){ return new Date().toISOString().slice(0,10); }
+
+function newSession(){
+  if(!confirm("کارت‌های فعلی پاک و از نو ساخته شوند؟")) return;
+  data={cards:makeCards(), range:document.getElementById("range").value, stats:{today:0,correct:0,date:todayKey()}};
+  save(); buildQueue(); showNext();
+}
+function ensureData(){
+  if(!data){
+    data={cards:makeCards(),range:document.getElementById("range").value,stats:{today:0,correct:0,date:todayKey()}};
+    save();
+  }
+  if(data.range) document.getElementById("range").value=data.range;
+  if(data.stats.date!==todayKey()){
+    data.stats.date=todayKey(); data.stats.today=0; save();
+  }
+}
+function buildQueue(){
+  const due=data.cards.filter(c=>c.box<=5);
+  // ساده: همه کارت‌ها در صف؛ ترتیب بر اساس جعبه
+  queue=due.slice().sort((p,q)=>p.box-q.box);
+}
+function showNext(){
+  answered=false;
+  document.getElementById("message").textContent="";
+  document.getElementById("nextBtn").classList.add("hidden");
+  document.getElementById("answer").value="";
+  document.getElementById("answer").disabled=false;
+  document.getElementById("nextBtn").textContent="کارت بعدی";
+  if(queue.length===0){
+    current=null;
+    document.getElementById("question").textContent="🎉 تمام شد!";
+    document.getElementById("boxLabel").textContent="برای امروز کارتی نمانده";
+    const msg=document.getElementById("message");
+    msg.textContent="آفرین! همه‌ی کارت‌ها را درست جواب دادی ✅";
+    msg.style.color="#2e8b57";
+    document.getElementById("answer").disabled=true;
+    return;
+  }
+  current=queue.shift();
+  document.getElementById("question").textContent=`${fa(current.a)} × ${fa(current.b)} = ؟`;
+  document.getElementById("boxLabel").textContent=`جعبه ${fa(current.box)}`;
+  document.getElementById("answer").focus();
+}
+function checkAnswer(){
+  if(answered || !current)return;
+  const val=Number(document.getElementById("answer").value);
+  if(!Number.isFinite(val)){document.getElementById("message").textContent="یک پاسخ وارد کنید.";return;}
+  answered=true;
+  const card=data.cards.find(c=>c.id===current.id);
+  data.stats.today++;
+  const msg=document.getElementById("message");
+  if(val===current.a*current.b){
+    data.stats.correct++;
+    card.box=Math.min(5,card.box+1);
+    msg.textContent="✅ درست! کارت به جعبه بعدی رفت.";
+    msg.style.color="#2e8b57";
+  }else{
+    card.box=1;
+    queue.push(card); // غلط: انتهای صف
+    msg.textContent=`❌ غلط. پاسخ درست ${fa(current.a*current.b)} بود؛ کارت به انتهای صف رفت.`;
+    msg.style.color="#b33a3a";
+  }
+  save();
+  document.getElementById("answer").disabled=true;
+  const nb=document.getElementById("nextBtn");
+  nb.textContent = queue.length===0 ? "پایان" : "کارت بعدی";
+  nb.classList.remove("hidden");
+}
+function nextCard(){showNext();}
+function updateStats(){
+  document.getElementById("today").textContent=fa(data?.stats?.today||0);
+  document.getElementById("correctCount").textContent=fa(data?.stats?.correct||0);
+  document.getElementById("cardCount").textContent=fa(data?.cards?.length||0);
+}
+function fa(n){return String(n).replace(/\d/g,d=>"۰۱۲۳۴۵۶۷۸۹"[d]);}
+document.getElementById("answer").addEventListener("keydown",e=>{if(e.key==="Enter")checkAnswer();});
+ensureData(); updateStats(); buildQueue(); showNext();
+</script>
+</body>
+</html>
